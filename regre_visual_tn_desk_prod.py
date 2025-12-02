@@ -10,7 +10,8 @@ from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+# CORRECCIÓN DE ESTABILIDAD: Se elimina la importación de webdriver_manager
+# from webdriver_manager.chrome import ChromeDriverManager 
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -444,9 +445,10 @@ def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir
     png = None
     
     try:
-        os.environ['WDM_LOG_LEVEL'] = '0' 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+        # CORRECCIÓN DE ESTABILIDAD CLAVE: Se usa Service() sin argumento, 
+        # asumiendo que el binario de Chrome está en el PATH, lo cual es más estable 
+        # para las capturas de pantalla grandes en entornos headless.
+        driver = webdriver.Chrome(service=Service(), options=options) 
         driver.set_page_load_timeout(60) 
         # driver.get(url) - Se llama dentro de obtener_estructura_dom para re-navegar
         
@@ -454,6 +456,7 @@ def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir
         
     except Exception as e:
         print(f"❌ Error al inicializar/ejecutar Selenium en {url}: {e}")
+        # Si falla en la inicialización o ejecución, registra el error fatal
         data = [{'selector': 'FATAL ERROR', 'y': 0, 'height': 0, 'x': 0, 'width': 0}]
     
     finally:
@@ -596,6 +599,7 @@ if __name__ == "__main__":
             
             # V1 (Base)
             print("  [V1] Recapturando con captura activa (Base)...")
+            # Usa los datos extraídos previamente, ya que el llamado puede fallar de nuevo
             data_v1_full, png_v1 = ejecutar_selenium_para_estructura(url1, capture=True)
             
             # V2 (Versionada)
@@ -612,7 +616,8 @@ if __name__ == "__main__":
             print("\n  ✅ No se encontraron diferencias graves. Tomando capturas V1 y V2 para la referencia...")
             # Tomar una captura rápida si pasa para el reporte
             data_v1_full, png_v1 = ejecutar_selenium_para_estructura(url1, capture=True) 
-            data_v2_full, png_v2_marcado = ejecutar_selenium_para_estructura(url2, capture=True) # png_v2_marcado se usa como png_v2_base
+            # Aquí, si pasa la prueba, la captura V2 no necesita marcado, la usamos directamente
+            data_v2_full, png_v2_marcado = ejecutar_selenium_para_estructura(url2, capture=True) 
             
         # Salida para caso de error fatal
         if not png_v1:
