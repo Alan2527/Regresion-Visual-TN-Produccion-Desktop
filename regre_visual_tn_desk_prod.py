@@ -6,6 +6,7 @@ import datetime
 import re
 import io
 import sys 
+import base64 # <-- NUEVA IMPORTACIÓN: Necesaria para decodificar la respuesta de CDP
 from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -50,7 +51,6 @@ def format_time(seconds):
 def format_date(timestamp):
     """Convierte un timestamp (YYYYMMDD_HHMMSS) a formato DD/MM/AAAA."""
     try:
-        # CORRECCIÓN 1: Se ajusta el formato de entrada de "%Y-%m-%d" a "%Y%m%d"
         dt_object = datetime.datetime.strptime(timestamp.split('_')[0], "%Y%m%d")
         return dt_object.strftime("%d/%m/%Y")
     except ValueError:
@@ -113,26 +113,50 @@ def limpiar_entorno_robusto(driver):
 def forzar_carga_contenido(driver):
     """
     Ejecuta scrolls suaves para forzar la carga de lazy loading y estabilizar el DOM.
-    (Optimización 1a: Reducción de Tiempos)
     """
     # 1. Scroll al final
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);") 
-    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
+    time.sleep(3) 
     # 2. Scroll al inicio
     driver.execute_script("window.scrollTo(0, 0);") 
-    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
+    time.sleep(3) 
     # 3. Scroll a la mitad para forzar carga central
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);") 
-    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
+    time.sleep(3) 
     # 4. Volver al inicio antes de medir
     driver.execute_script("window.scrollTo(0, 0);") 
-    time.sleep(5) # 🛠️ AHORRO DE TIEMPO: De 15s a 5s
+    time.sleep(5) 
+
+# ---
+## Función CRÍTICA DE ESTABILIDAD: Captura de Pantalla Completa (CDP)
+# ---
+
+def get_full_screenshot_cdp(driver):
+    """
+    Obtiene una captura de pantalla de página completa usando el Protocolo CDP.
+    Esta función reemplaza el método inestable de redimensionamiento de ventana de Selenium.
+    """
+    try:
+        # 1. Usar CDP para obtener la captura de página completa como base64
+        screenshot_data = driver.execute_cdp_cmd(
+            'Page.captureScreenshot',
+            {
+                'format': 'png',
+                'fullPage': True,  # La clave para la captura de página completa
+                'quality': 100
+            }
+        )
+        # 2. Decodificar de base64 a bytes
+        return base64.b64decode(screenshot_data['data'])
+    except Exception as e:
+        print(f"     ❌ Error en CDP Page.captureScreenshot: {e}")
+        return None
 
 # ---
 ## Función Clave: Extracción de Datos del DOM (4 Puntos: X, Y, W, H) - CON CAPTURA OPCIONAL
 # ---
 
-def obtener_estructura_dom(driver, capture=True): # <--- CAMBIO: Añadir capture
+def obtener_estructura_dom(driver, capture=True): 
     
     """
     Ejecuta JavaScript para obtener el selector CSS, la posición (X, Y) y la dimensión (W, H) de CADA DIV.
@@ -203,10 +227,9 @@ def obtener_estructura_dom(driver, capture=True): # <--- CAMBIO: Añadir capture
         # Espera de 20 segundos para document.readyState
         WebDriverWait(driver, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
         
-        # === USO DE LA LIMPIZA ROBUSTA ===
+        # === USO DE LA LIMPIEZA ROBUSTA ===
         limpiar_entorno_robusto(driver)
-        # TIEMPO DE ESPERA ADICIONAL AÑADIDO (Optimización 1b: Reducción de Tiempos)
-        time.sleep(5) # 🛠️ AHORRO DE TIEMPO: De 15s a 5s
+        time.sleep(5) 
         limpiar_entorno_robusto(driver) 
         forzar_carga_contenido(driver) 
         # =================================
@@ -214,14 +237,11 @@ def obtener_estructura_dom(driver, capture=True): # <--- CAMBIO: Añadir capture
         print("     📐 Extrayendo posiciones y dimensiones del DOM (X, Y, W, H)...")
         data = driver.execute_script(js_script_css_selector)
         
-        # Tomar captura de pantalla (Optimización 2b: Condicional)
+        # Tomar captura de pantalla (Captura Condicional)
         if capture:
-            print("     📸 Tomando captura de pantalla para el reporte...")
-            total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
-            original_size = driver.get_window_size()
-            driver.set_window_size(original_size['width'], total_height)
-            png = driver.get_screenshot_as_png()
-            driver.set_window_size(original_size['width'], original_size['height'])
+            print("     📸 Tomando captura de pantalla para el reporte (Usando CDP)...")
+            # ⭐️ FIX DE ESTABILIDAD: Se utiliza la función CDP ⭐️
+            png = get_full_screenshot_cdp(driver)
         else:
             png = None # Retorna None si no se pidió captura
         
@@ -412,7 +432,6 @@ def marcar_fallas_en_captura(png_data, fallas, data_v2):
             cv2.rectangle(img, (x1, y1), (x2, y2), color_bgr, thickness) 
             selectores_ya_marcados.add(selector) 
         else:
-            # Eliminado el aviso de 'coordenadas inválidas'.
             pass
 
     is_success, buffer = cv2.imencode(".png", img)
@@ -424,7 +443,7 @@ def marcar_fallas_en_captura(png_data, fallas, data_v2):
 ## Función para Inicializar y Cerrar Selenium
 # ---
 
-def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir capture
+def ejecutar_selenium_para_estructura(url, capture=True):
     """Maneja la inicialización del driver, llama a la extracción y lo cierra."""
     
     options = webdriver.ChromeOptions()
@@ -437,7 +456,7 @@ def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir
     options.add_experimental_option('excludeSwitches', ['enable-logging']) 
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    # ⭐️ SOLUCIÓN B: Añadir flag de estabilidad para entornos headless ⭐️
+    # Añadir flag de estabilidad para entornos headless
     options.add_argument("--disable-features=site-per-process") 
     
     driver = None
@@ -445,14 +464,11 @@ def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir
     png = None
     
     try:
-        # CORRECCIÓN DE ESTABILIDAD CLAVE: Se usa Service() sin argumento, 
-        # asumiendo que el binario de Chrome está en el PATH, lo cual es más estable 
-        # para las capturas de pantalla grandes en entornos headless.
+        # Se usa Service() sin argumento, asumiendo que el binario de Chrome está en el PATH
         driver = webdriver.Chrome(service=Service(), options=options) 
         driver.set_page_load_timeout(60) 
-        # driver.get(url) - Se llama dentro de obtener_estructura_dom para re-navegar
         
-        data, png = obtener_estructura_dom(driver, capture=capture) # <--- CAMBIO: Pasar el flag
+        data, png = obtener_estructura_dom(driver, capture=capture) 
         
     except Exception as e:
         print(f"❌ Error al inicializar/ejecutar Selenium en {url}: {e}")
@@ -498,11 +514,8 @@ if __name__ == "__main__":
           # Liveblogging
           "https://tn.com.ar/deportes/futbol/2025/11/07/franco-colapinto-corre-la-primera-practica-y-la-clasificacion-sprint-del-gp-de-brasil/": "Liveblogging",
           # Newsletter
-          # No hay ninguno a la fecha 13/11/2025
           # Historia
-          # No hay ninguno a la fecha 13/11/2025
           # Recipe
-          # No aplica a TN. 
               }
     
     
@@ -525,7 +538,7 @@ if __name__ == "__main__":
         
     # --- FIN DE MANEJO DEL ARGUMENTO ---
 
-    # 🔑 CORRECCIÓN 1: GENERAR TIMESTAMP ÚNICO PARA ESTA EJECUCIÓN
+    # GENERAR TIMESTAMP ÚNICO PARA ESTA EJECUCIÓN
     TIMESTAMP_EJECUCION = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     all_comparisons_data = [] 
@@ -599,7 +612,6 @@ if __name__ == "__main__":
             
             # V1 (Base)
             print("  [V1] Recapturando con captura activa (Base)...")
-            # Usa los datos extraídos previamente, ya que el llamado puede fallar de nuevo
             data_v1_full, png_v1 = ejecutar_selenium_para_estructura(url1, capture=True)
             
             # V2 (Versionada)
