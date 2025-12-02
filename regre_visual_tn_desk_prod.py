@@ -112,28 +112,30 @@ def limpiar_entorno_robusto(driver):
 def forzar_carga_contenido(driver):
     """
     Ejecuta scrolls suaves para forzar la carga de lazy loading y estabilizar el DOM.
+    (Optimización 1a: Reducción de Tiempos)
     """
     # 1. Scroll al final
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);") 
-    time.sleep(10) # 🛠️ Aumentado de 8 a 10s para estabilidad
+    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
     # 2. Scroll al inicio
     driver.execute_script("window.scrollTo(0, 0);") 
-    time.sleep(10) # 🛠️ Aumentado de 8 a 10s para estabilidad
+    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
     # 3. Scroll a la mitad para forzar carga central
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);") 
-    time.sleep(10) # 🛠️ Aumentado de 8 a 10s para estabilidad
+    time.sleep(3) # 🛠️ AHORRO DE TIEMPO: De 10s a 3s
     # 4. Volver al inicio antes de medir
     driver.execute_script("window.scrollTo(0, 0);") 
-    time.sleep(15) # 🛠️ Aumentado de 12 a 15s para estabilidad
+    time.sleep(5) # 🛠️ AHORRO DE TIEMPO: De 15s a 5s
 
 # ---
-## Función Clave: Extracción de Datos del DOM (4 Puntos: X, Y, W, H)
+## Función Clave: Extracción de Datos del DOM (4 Puntos: X, Y, W, H) - CON CAPTURA OPCIONAL
 # ---
 
-def obtener_estructura_dom(driver):
+def obtener_estructura_dom(driver, capture=True): # <--- CAMBIO: Añadir capture
     
     """
     Ejecuta JavaScript para obtener el selector CSS, la posición (X, Y) y la dimensión (W, H) de CADA DIV.
+    La captura de pantalla es opcional.
     """
     js_script_css_selector = """
         function getCssSelector(el) {
@@ -202,8 +204,8 @@ def obtener_estructura_dom(driver):
         
         # === USO DE LA LIMPIZA ROBUSTA ===
         limpiar_entorno_robusto(driver)
-        # TIEMPO DE ESPERA ADICIONAL AÑADIDO
-        time.sleep(15) # 🛠️ Aumentado de 10 a 15s para mayor estabilidad
+        # TIEMPO DE ESPERA ADICIONAL AÑADIDO (Optimización 1b: Reducción de Tiempos)
+        time.sleep(5) # 🛠️ AHORRO DE TIEMPO: De 15s a 5s
         limpiar_entorno_robusto(driver) 
         forzar_carga_contenido(driver) 
         # =================================
@@ -211,14 +213,17 @@ def obtener_estructura_dom(driver):
         print("     📐 Extrayendo posiciones y dimensiones del DOM (X, Y, W, H)...")
         data = driver.execute_script(js_script_css_selector)
         
-        # Tomar captura de pantalla 
-        print("     📸 Tomando captura de pantalla para el reporte...")
-        total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
-        original_size = driver.get_window_size()
-        driver.set_window_size(original_size['width'], total_height)
-        png = driver.get_screenshot_as_png()
-        driver.set_window_size(original_size['width'], original_size['height'])
-
+        # Tomar captura de pantalla (Optimización 2b: Condicional)
+        if capture:
+            print("     📸 Tomando captura de pantalla para el reporte...")
+            total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
+            original_size = driver.get_window_size()
+            driver.set_window_size(original_size['width'], total_height)
+            png = driver.get_screenshot_as_png()
+            driver.set_window_size(original_size['width'], original_size['height'])
+        else:
+            png = None # Retorna None si no se pidió captura
+        
     except Exception as e:
         print(f"     ❌ Error en la extracción/captura: {e}")
         data = [{'selector': 'FATAL ERROR', 'y': 0, 'height': 0, 'x': 0, 'width': 0}] 
@@ -418,7 +423,7 @@ def marcar_fallas_en_captura(png_data, fallas, data_v2):
 ## Función para Inicializar y Cerrar Selenium
 # ---
 
-def ejecutar_selenium_para_estructura(url):
+def ejecutar_selenium_para_estructura(url, capture=True): # <--- CAMBIO: Añadir capture
     """Maneja la inicialización del driver, llama a la extracción y lo cierra."""
     
     options = webdriver.ChromeOptions()
@@ -443,9 +448,9 @@ def ejecutar_selenium_para_estructura(url):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_page_load_timeout(60) 
-        driver.get(url)
+        # driver.get(url) - Se llama dentro de obtener_estructura_dom para re-navegar
         
-        data, png = obtener_estructura_dom(driver)
+        data, png = obtener_estructura_dom(driver, capture=capture) # <--- CAMBIO: Pasar el flag
         
     except Exception as e:
         print(f"❌ Error al inicializar/ejecutar Selenium en {url}: {e}")
@@ -546,12 +551,12 @@ if __name__ == "__main__":
         print(f"[{idx + 1}/{len(BASE_URLS_MAP)}] | Página: {url_description}")
 
 
-        # 3.2 Obtener Datos DOM y Capturas
-        print("  [V1] Obteniendo datos estructurales...")
-        data_v1, png_v1 = ejecutar_selenium_para_estructura(url1)
+        # 3.2 Obtener Datos DOM (RÁPIDO: sin captura - capture=False)
+        print("  [V1] Obteniendo datos estructurales (FAST: sin captura)...")
+        data_v1, _ = ejecutar_selenium_para_estructura(url1, capture=False)
         
-        print("\n  [V2] Obteniendo datos estructurales...")
-        data_v2, png_v2 = ejecutar_selenium_para_estructura(url2)
+        print("\n  [V2] Obteniendo datos estructurales (FAST: sin captura)...")
+        data_v2, _ = ejecutar_selenium_para_estructura(url2, capture=False)
 
         
         # 3.3 Comparar Estructuras
@@ -577,15 +582,44 @@ if __name__ == "__main__":
         
         fallas = fallas_filtradas 
         
-        # 3.5 Marcado Visual en la Captura de V2 (Ahora usa la lista filtrada)
-        png_v2_marcado = png_v2
         # Las fallas graves son aquellas cuyo tipo contiene 'GRAVE'
         fallas_graves = [f for f in fallas if 'GRAVE' in f['tipo']] 
         
-        if fallas:
-            print(f"  🔴🔵 Marcando visualmente las diferencias en la captura V2 (si existen)")
-            png_v2_marcado = marcar_fallas_en_captura(png_v2, fallas, data_v2) 
+        # ====================================================================
+        # PASO 3.5: CAPTURA CONDICIONAL (2b) - SOLO SI HAY FALLAS O PARA EL REPORTE
+        # ====================================================================
+        png_v1 = None
+        png_v2_marcado = None
+
+        if fallas_graves:
+            print("\n  ⚠️ Diferencias graves encontradas. Recapturando con captura activa para reporte...")
             
+            # V1 (Base)
+            print("  [V1] Recapturando con captura activa (Base)...")
+            data_v1_full, png_v1 = ejecutar_selenium_para_estructura(url1, capture=True)
+            
+            # V2 (Versionada)
+            print("  [V2] Recapturando con captura activa (Versionada)...")
+            data_v2_full, png_v2 = ejecutar_selenium_para_estructura(url2, capture=True)
+            
+            # Marcado Visual en la Captura de V2
+            if png_v2:
+                print(f"  🔴🔵 Marcando visualmente las diferencias en la captura V2...")
+                png_v2_marcado = marcar_fallas_en_captura(png_v2, fallas, data_v2) 
+        
+        # Si no hay fallas, tomar una sola captura de V1 y V2 para la referencia en el reporte
+        elif not fallas and data_v1 and data_v2:
+            print("\n  ✅ No se encontraron diferencias graves. Tomando capturas V1 y V2 para la referencia...")
+            # Tomar una captura rápida si pasa para el reporte
+            data_v1_full, png_v1 = ejecutar_selenium_para_estructura(url1, capture=True) 
+            data_v2_full, png_v2_marcado = ejecutar_selenium_para_estructura(url2, capture=True) # png_v2_marcado se usa como png_v2_base
+            
+        # Salida para caso de error fatal
+        if not png_v1:
+            print("     ⚠️ Captura V1 fallida.")
+        if not png_v2_marcado:
+            print("     ⚠️ Captura V2 fallida.")
+        
         
         # 3.6 Reporte y Métrica
         end_time_url = time.time()
@@ -594,13 +628,21 @@ if __name__ == "__main__":
         final_alert_color = "red" if fallas_graves else "green"
         
         # Guardar capturas de pantalla 
-        # 🔑 CORRECCIÓN 2: USAR EL TIMESTAMP Y LA VERSIÓN EN EL NOMBRE DE LOS ARCHIVOS
         filename1 = f"{domain_name}_V{version_number}_base_{TIMESTAMP_EJECUCION}.png"
         filename2_diff = f"{domain_name}_V{version_number}_diff_{TIMESTAMP_EJECUCION}.png" 
         
-        if png_v1: Image.open(io.BytesIO(png_v1)).save(os.path.join(output_dir, filename1))
+        if png_v1: 
+            print(f"     💾 Guardando captura V1 (Base)...")
+            Image.open(io.BytesIO(png_v1)).save(os.path.join(output_dir, filename1))
+        else:
+            print(f"     ⚠️ Skip: No se pudo generar la captura V1.")
+
         if png_v2_marcado: 
+            print(f"     💾 Guardando captura V2 (Versionada Marcada/Base)...")
             Image.open(io.BytesIO(png_v2_marcado)).save(os.path.join(output_dir, filename2_diff))
+        else:
+            print(f"     ⚠️ Skip: No se pudo generar la captura V2.")
+
 
         # Generar HTML de las fallas detallado
         fallas_html_detalle = "<ul>"
@@ -690,7 +732,6 @@ if __name__ == "__main__":
     html_file = os.path.join(output_dir, f"Reporte_DOM_Estructural_v{version_number}_{timestamp_html}.html")
     
     formatted_time_global = format_time(time_elapsed_global)
-    #formatted_date = format_date(timestamp_html) # Esta variable ya no se necesita
 
     
     # --- Generación del contenido detallado por URL ---
@@ -995,6 +1036,3 @@ if __name__ == "__main__":
     print(f"✅ Proceso de regresión visual completado.")
     print(f"📄 Reporte generado en: {html_file}")
     print(f"==================================================================================")
-
-
-
